@@ -1,8 +1,4 @@
 <!doctype html>
-<!--
-  Draft GitHub Pages landing page for Persona Outfits.
-  Not published. Edit this file freely, then follow docs/README.md to publish.
--->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -201,23 +197,6 @@
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
       color: #17111f;
       box-shadow: 0 12px 34px rgba(167, 139, 250, 0.25);
-    }
-
-    .draft {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin: 24px 0 0;
-      color: var(--muted);
-      font-size: 0.78rem;
-    }
-
-    .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 0 4px var(--accent-soft);
     }
 
     .mock-wrap {
@@ -455,12 +434,6 @@
       margin-top: 30px;
     }
 
-    .aside {
-      margin: 18px 0 0;
-      color: var(--muted);
-      font-size: 0.86rem;
-    }
-
     .usage {
       display: grid;
       grid-template-columns: 1.05fr 0.95fr;
@@ -544,6 +517,12 @@
       justify-content: space-between;
       gap: 12px 24px;
       padding: 24px 0 34px;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
     }
 
     .site-footer a {
@@ -649,6 +628,7 @@
         <a href="#features">Features</a>
         <a href="#install">Install</a>
         <a href="#usage">Usage</a>
+        <a href="https://github.com/Bekajoiy/ST-PersonaOutfit" target="_blank" rel="noopener">GitHub</a>
       </nav>
     </div>
   </header>
@@ -666,7 +646,6 @@
           <a class="button primary" href="#install">Installation</a>
           <a class="button" href="#features">See features</a>
         </div>
-        <p class="draft"><span class="dot" aria-hidden="true"></span> Draft page — not published.</p>
       </div>
 
       <div class="mock-wrap">
@@ -750,29 +729,25 @@
     <section class="section wrap" id="install">
       <div class="section-head">
         <p class="eyebrow">Installation</p>
-        <h2>Three steps.</h2>
+        <h2>Two ways to install.</h2>
       </div>
       <div class="steps">
         <div class="step">
           <span class="num">01</span>
-          <h3>Copy the folder</h3>
-          <p>Put <code>Persona-Outfits</code> in <code>data/&lt;your-user&gt;/extensions/</code>. For the default user, that is <code>data/default-user/extensions/</code>.</p>
+          <h3>From Git (recommended)</h3>
+          <p>Open <strong>Extensions → Install Extension</strong> in SillyTavern, paste <code>https://github.com/Bekajoiy/ST-PersonaOutfit</code>, and confirm.</p>
         </div>
         <div class="step">
           <span class="num">02</span>
-          <h3>Reload SillyTavern</h3>
-          <p>Reload the page, or use <strong>Extensions → Reload</strong>.</p>
+          <h3>Or copy the folder</h3>
+          <p>Put the project folder in <code>data/&lt;your-user&gt;/extensions/</code>. For the default user: <code>data/default-user/extensions/</code>.</p>
         </div>
         <div class="step">
           <span class="num">03</span>
-          <h3>Open the panel</h3>
-          <p>Click the shirt button in the corner, or run <code>/outfits</code>.</p>
+          <h3>Reload and open</h3>
+          <p>Reload SillyTavern, then click the shirt button in the corner or run <code>/outfits</code>.</p>
         </div>
       </div>
-      <p class="aside">
-        Installing from Git? Replace this placeholder with your repository URL before publishing:
-        <code>https://github.com/YOUR-USERNAME/Persona-Outfits</code>.
-      </p>
     </section>
 
     <section class="section wrap" id="usage">
@@ -814,7 +789,10 @@
   <footer class="site-footer">
     <div class="wrap footer-inner">
       <span>Persona Outfits — a SillyTavern extension.</span>
-      <a href="#top">Back to top ↑</a>
+      <span class="footer-links">
+        <a href="https://github.com/Bekajoiy/ST-PersonaOutfit" target="_blank" rel="noopener">Source on GitHub</a>
+        <a href="#top">Back to top ↑</a>
+      </span>
     </div>
   </footer>
 </body>

@@ -1,0 +1,643 @@
+/* Persona Outfits — floating panels themed with SillyTavern's CSS variables. */
+
+.po-hidden {
+    display: none !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Toggle button                                                       */
+/* ------------------------------------------------------------------ */
+
+.po-toggle {
+    position: fixed;
+    top: calc(100vh - 64px);
+    left: calc(100vw - 64px);
+    right: auto;
+    bottom: auto;
+    z-index: 3001;
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.18));
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 25, 0.88));
+    color: var(--SmartThemeBodyColor, #eeeeee);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+    cursor: grab;
+    touch-action: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.po-toggle:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 9px 26px rgba(0, 0, 0, 0.45);
+}
+
+.po-toggle.po-active {
+    box-shadow: 0 0 0 2px var(--SmartThemeQuoteColor, #9a8cff), 0 9px 26px rgba(0, 0, 0, 0.45);
+}
+
+.po-toggle.po-dragging {
+    cursor: grabbing;
+    transform: none;
+    transition: none;
+    user-select: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Outfit panel                                                        */
+/* ------------------------------------------------------------------ */
+
+.po-panel {
+    position: fixed;
+    /* Fallback; JS places it against the visual viewport on open. */
+    top: 120px;
+    left: 18px;
+    right: auto;
+    bottom: auto;
+    z-index: 3000;
+    width: 310px;
+    max-width: calc(100vw - 24px);
+    max-height: min(62vh, 580px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.16));
+    background: var(--SmartThemeBlurTintColor, rgba(18, 18, 22, 0.92));
+    color: var(--SmartThemeBodyColor, #eeeeee);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(14px);
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.po-panel.po-dragging,
+.po-image-panel.po-dragging,
+.po-text-panel.po-dragging,
+.po-image-panel.po-resizing {
+    user-select: none;
+}
+
+.po-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 9px 10px 9px 12px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+    background: rgba(255, 255, 255, 0.05);
+    cursor: grab;
+    touch-action: none;
+}
+
+.po-header:active {
+    cursor: grabbing;
+}
+
+.po-grip {
+    font-size: 11px;
+    opacity: 0.45;
+}
+
+.po-title {
+    flex: 0 0 auto;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.po-persona-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.65;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.po-persona-name::before {
+    content: "· ";
+    opacity: 0.55;
+}
+
+.po-icon-btn {
+    padding: 4px 5px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.po-icon-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.po-close {
+    margin-left: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Rows                                                                */
+/* ------------------------------------------------------------------ */
+
+.po-list {
+    flex: 1 1 auto;
+    min-height: 40px;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+.po-empty {
+    padding: 16px 10px;
+    text-align: center;
+    font-style: italic;
+    opacity: 0.6;
+}
+
+.po-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.po-row:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.po-row:focus-visible {
+    outline: 1px solid var(--SmartThemeQuoteColor, #9a8cff);
+    outline-offset: -1px;
+}
+
+.po-row.po-active {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 3px 0 0 var(--SmartThemeQuoteColor, #9a8cff);
+}
+
+.po-drag-handle {
+    flex: 0 0 12px;
+    width: 12px;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    opacity: 0.3;
+    cursor: grab;
+    touch-action: none;
+    transition: opacity 0.12s ease;
+}
+
+.po-row:hover .po-drag-handle,
+.po-row:focus-within .po-drag-handle {
+    opacity: 0.8;
+}
+
+.po-drag-handle:active {
+    cursor: grabbing;
+}
+
+.po-row.po-row-reordering {
+    opacity: 0.45;
+}
+
+.po-row.po-drop-before::before,
+.po-row.po-drop-after::after {
+    content: "";
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--SmartThemeQuoteColor, #9a8cff);
+    box-shadow: 0 0 6px var(--SmartThemeQuoteColor, #9a8cff);
+    pointer-events: none;
+}
+
+.po-row.po-drop-before::before {
+    top: -1px;
+}
+
+.po-row.po-drop-after::after {
+    bottom: -1px;
+}
+
+body.po-reordering {
+    user-select: none;
+}
+
+.po-thumb {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 9px;
+    background: rgba(0, 0, 0, 0.25);
+    opacity: 0.92;
+}
+
+.po-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.po-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.po-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.po-sub {
+    margin-top: 1px;
+    font-size: 11.5px;
+    opacity: 0.62;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.po-badge {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.16);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.9;
+}
+
+.po-actions {
+    display: flex;
+    gap: 2px;
+    flex: none;
+    opacity: 0.35;
+    transition: opacity 0.12s ease;
+}
+
+.po-row:hover .po-actions,
+.po-row:focus-within .po-actions {
+    opacity: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Footer                                                              */
+/* ------------------------------------------------------------------ */
+
+.po-footer {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 8px 10px 10px;
+    border-top: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+}
+
+.po-footer .menu_button {
+    flex: 1 1 auto;
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* Inline editor                                                       */
+/* ------------------------------------------------------------------ */
+
+.po-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 2px 4px 8px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.po-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11.5px;
+}
+
+.po-field > span {
+    opacity: 0.7;
+}
+
+.po-editor .text_pole {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
+}
+
+.po-textarea {
+    min-height: 56px;
+    resize: vertical;
+}
+
+.po-editor-image {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.po-drop {
+    position: relative;
+    flex: 0 0 96px;
+    width: 96px;
+    height: 96px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+.po-drop.po-drop-hover {
+    border-color: var(--SmartThemeQuoteColor, #9a8cff);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.po-drop img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.po-drop-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    font-size: 10px;
+    text-align: center;
+    opacity: 0.55;
+}
+
+.po-image-tools {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+.po-image-tools .menu_button {
+    margin: 0;
+    padding: 4px 8px;
+    font-size: 11.5px;
+}
+
+.po-image-url {
+    font-size: 11.5px;
+}
+
+.po-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.po-editor-actions .menu_button {
+    margin: 0;
+    padding: 5px 12px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings block                                                      */
+/* ------------------------------------------------------------------ */
+
+.po-settings .po-help {
+    margin: 6px 0 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    opacity: 0.7;
+}
+
+.po-settings code {
+    padding: 0 3px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* ------------------------------------------------------------------ */
+/* Image panel                                                         */
+/* ------------------------------------------------------------------ */
+
+.po-image-panel {
+    position: fixed;
+    /* Fallback; JS places it against the visual viewport when shown. */
+    top: 96px;
+    left: 18px;
+    right: auto;
+    bottom: auto;
+    z-index: 3000;
+    width: 300px;
+    height: min(460px, 62vh);
+    max-width: calc(100vw - 24px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.16));
+    background: var(--SmartThemeBlurTintColor, rgba(18, 18, 22, 0.92));
+    color: var(--SmartThemeBodyColor, #eeeeee);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(14px);
+    font-size: 13px;
+}
+
+.po-image-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+    background: rgba(255, 255, 255, 0.05);
+    font-weight: 600;
+    cursor: grab;
+    touch-action: none;
+}
+
+.po-image-header:active {
+    cursor: grabbing;
+}
+
+.po-image-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.po-image-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.po-image-wrap img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.po-resize-grip {
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    z-index: 2;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    touch-action: none;
+    opacity: 0.55;
+}
+
+.po-resize-grip::before,
+.po-resize-grip::after {
+    content: "";
+    position: absolute;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+}
+
+.po-resize-grip::before {
+    right: 2px;
+    bottom: 2px;
+    width: 10px;
+    height: 10px;
+}
+
+.po-resize-grip::after {
+    right: 7px;
+    bottom: 7px;
+    width: 5px;
+    height: 5px;
+    opacity: 0.65;
+}
+
+/* ------------------------------------------------------------------ */
+/* Description panel                                                   */
+/* ------------------------------------------------------------------ */
+
+.po-text-panel {
+    position: fixed;
+    top: 96px;
+    left: 18px;
+    right: auto;
+    bottom: auto;
+    z-index: 3000;
+    width: 300px;
+    max-width: calc(100vw - 24px);
+    max-height: 40vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.16));
+    background: var(--SmartThemeBlurTintColor, rgba(18, 18, 22, 0.92));
+    color: var(--SmartThemeBodyColor, #eeeeee);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(14px);
+    font-size: 13px;
+}
+
+.po-text-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+    background: rgba(255, 255, 255, 0.05);
+    font-weight: 600;
+    cursor: grab;
+    touch-action: none;
+}
+
+.po-text-header:active {
+    cursor: grabbing;
+}
+
+.po-text-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.po-text-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 12px 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ */
+/* Small screens                                                       */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+    .po-panel,
+    .po-image-panel,
+    .po-text-panel {
+        width: min(310px, calc(100vw - 20px));
+    }
+
+    .po-toggle {
+        top: calc(100vh - 58px);
+        left: calc(100vw - 58px);
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "display_name": "Persona Outfits",
+    "loading_order": 25,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Bekajoiy",
+    "version": "1.4.0",
+    "homePage": "https://github.com/Bekajoiy/ST-PersonaOutfit"
+}
