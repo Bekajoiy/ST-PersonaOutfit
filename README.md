@@ -53,4 +53,4 @@ Copy the project folder into `data/<your-user>/extensions/` (for the default use
 
 ## License
 
-No license has been chosen yet. Add one before redistributing if you want to grant others permission to reuse the code.
+Released under [CC0 1.0 Universal](LICENSE).
