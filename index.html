@@ -1,0 +1,821 @@
+<!doctype html>
+<!--
+  Draft GitHub Pages landing page for Persona Outfits.
+  Not published. Edit this file freely, then follow docs/README.md to publish.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Persona Outfits — a per-persona outfit manager for SillyTavern. Save outfits with descriptions and images, wear them with one click, and keep each persona's wardrobe separate.">
+  <title>Persona Outfits — a SillyTavern extension</title>
+  <style>
+    :root {
+      --bg: #0b0a10;
+      --panel: #15121d;
+      --panel-soft: #1a1623;
+      --text: #f5f1fb;
+      --muted: #a9a1bd;
+      --line: rgba(255, 255, 255, 0.1);
+      --accent: #a78bfa;
+      --accent-2: #f472b6;
+      --accent-soft: rgba(167, 139, 250, 0.14);
+      --radius: 18px;
+      --max: 1120px;
+      --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.55;
+      background:
+        radial-gradient(900px 520px at 12% -10%, rgba(167, 139, 250, 0.18), transparent 62%),
+        radial-gradient(760px 440px at 100% 8%, rgba(244, 114, 182, 0.12), transparent 62%),
+        var(--bg);
+    }
+
+    a {
+      color: inherit;
+    }
+
+    code,
+    pre {
+      font-family: var(--mono);
+    }
+
+    code {
+      padding: 0.12em 0.38em;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.07);
+      color: #e9e2ff;
+      font-size: 0.88em;
+    }
+
+    .wrap {
+      width: min(var(--max), calc(100% - 40px));
+      margin-inline: auto;
+    }
+
+    .skip {
+      position: absolute;
+      left: 12px;
+      top: -60px;
+      z-index: 10;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--text);
+      color: var(--bg);
+      text-decoration: none;
+      font-weight: 700;
+      transition: top 0.15s ease;
+    }
+
+    .skip:focus {
+      top: 12px;
+    }
+
+    .site-header {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 20px 0;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      width: 16px;
+      height: 16px;
+      border-radius: 5px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 20px rgba(167, 139, 250, 0.55);
+    }
+
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    nav a:hover {
+      color: var(--text);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 56px;
+      align-items: center;
+      padding: 78px 0 68px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+      font-size: clamp(2.3rem, 5.7vw, 4.6rem);
+      line-height: 0.98;
+      letter-spacing: -0.045em;
+    }
+
+    .lede {
+      max-width: 58ch;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.08rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 20px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.92rem;
+      font-weight: 700;
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.24);
+    }
+
+    .button.primary {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #17111f;
+      box-shadow: 0 12px 34px rgba(167, 139, 250, 0.25);
+    }
+
+    .draft {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+
+    .mock-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 430px;
+      margin-left: auto;
+    }
+
+    .mock-glow {
+      position: absolute;
+      inset: -34px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(167, 139, 250, 0.2), transparent 68%);
+      filter: blur(26px);
+      pointer-events: none;
+    }
+
+    .mock {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 32px 90px rgba(0, 0, 0, 0.52);
+      font-size: 13px;
+      transform: rotate(-1.4deg);
+      transition: transform 0.2s ease;
+    }
+
+    .mock:hover {
+      transform: rotate(0deg);
+    }
+
+    .mock-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+    }
+
+    .mock-head strong {
+      font-weight: 700;
+    }
+
+    .persona {
+      flex: 1 1 auto;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .x {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    .grip {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: -2px;
+      opacity: 0.65;
+    }
+
+    .mock-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .mock-row.is-active {
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .thumb {
+      flex: 0 0 38px;
+      width: 38px;
+      height: 38px;
+      border-radius: 9px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    }
+
+    .t1 {
+      background: linear-gradient(135deg, #a78bfa, #f472b6);
+    }
+
+    .t2 {
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+    }
+
+    .t3 {
+      background: linear-gradient(135deg, #34d399, #0ea5e9);
+    }
+
+    .t4 {
+      background: linear-gradient(135deg, #fbbf24, #f97316);
+    }
+
+    .mock-text {
+      display: grid;
+      flex: 1 1 auto;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    .mock-text b {
+      font-size: 12.5px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mock-text small {
+      color: var(--muted);
+      font-size: 10.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .wearing {
+      flex: 0 0 auto;
+      padding: 2px 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      color: var(--text);
+      font-size: 8.5px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .mock-foot {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      border-top: 1px solid var(--line);
+    }
+
+    .mock-btn {
+      flex: 1 1 0;
+      padding: 7px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .mock-note {
+      margin: 16px 4px 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-align: right;
+    }
+
+    .section {
+      padding: 76px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .section-head {
+      max-width: 720px;
+    }
+
+    .section-head h2 {
+      margin-bottom: 0;
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      letter-spacing: -0.035em;
+      line-height: 1.08;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin-top: 30px;
+    }
+
+    .card,
+    .step {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+    }
+
+    .num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 16px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .card h3,
+    .step h3 {
+      margin-bottom: 6px;
+      font-size: 1.02rem;
+      letter-spacing: -0.01em;
+    }
+
+    .card p,
+    .step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 30px;
+    }
+
+    .aside {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .usage {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 32px;
+      align-items: start;
+      margin-top: 30px;
+    }
+
+    .usage-list {
+      display: grid;
+      gap: 14px;
+      margin: 0;
+      padding-left: 1.2em;
+      color: var(--muted);
+    }
+
+    .usage-list strong {
+      color: var(--text);
+    }
+
+    .snippet {
+      margin: 0;
+      padding: 20px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #0a0810;
+      color: #d8d0f0;
+      font-size: 0.82rem;
+      line-height: 1.65;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .snippet code {
+      padding: 0;
+      background: none;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 36px;
+      align-items: start;
+      padding: 32px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(167, 139, 250, 0.08), rgba(244, 114, 182, 0.04));
+    }
+
+    .notes h2 {
+      margin-bottom: 0;
+      font-size: clamp(1.7rem, 2.6vw, 2.2rem);
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .note-list {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding-left: 1.1em;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .note-list li::marker {
+      color: var(--accent);
+    }
+
+    .site-footer {
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px 24px;
+      padding: 24px 0 34px;
+    }
+
+    .site-footer a {
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .site-footer a:hover {
+      color: var(--accent);
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 36px;
+        padding: 56px 0 52px;
+      }
+
+      .mock-wrap {
+        margin: 0 auto;
+      }
+
+      .mock {
+        transform: none;
+      }
+
+      .usage,
+      .notes {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .steps {
+        grid-template-columns: 1fr;
+      }
+
+      .section {
+        padding: 56px 0;
+      }
+
+      .notes {
+        padding: 24px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .wrap {
+        width: min(var(--max), calc(100% - 28px));
+      }
+
+      .header-inner {
+        padding: 16px 0;
+      }
+
+      nav {
+        gap: 13px;
+      }
+
+      nav a {
+        font-size: 0.82rem;
+      }
+
+      .hero {
+        padding-top: 42px;
+      }
+
+      .actions .button {
+        flex: 1 1 auto;
+      }
+
+      .mock-note {
+        text-align: left;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      * {
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top" aria-label="Persona Outfits home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        Persona Outfits
+      </a>
+      <nav aria-label="Sections">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="#usage">Usage</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" id="top">
+      <div class="hero-copy">
+        <p class="eyebrow">SillyTavern extension</p>
+        <h1>Give every persona their own wardrobe.</h1>
+        <p class="lede">
+          A small floating outfit manager. Save an outfit with a description and an image, click it to wear it,
+          and keep each persona's list separate.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="#install">Installation</a>
+          <a class="button" href="#features">See features</a>
+        </div>
+        <p class="draft"><span class="dot" aria-hidden="true"></span> Draft page — not published.</p>
+      </div>
+
+      <div class="mock-wrap">
+        <div class="mock-glow" aria-hidden="true"></div>
+        <div class="mock" role="img" aria-label="Preview of the Persona Outfits panel showing a per-persona outfit list with drag handles, thumbnails and a Wearing badge.">
+          <div class="mock-head">
+            <span class="grip" aria-hidden="true">⠿</span>
+            <strong>Outfits</strong>
+            <span class="persona">· Your Persona</span>
+            <span class="x" aria-hidden="true">×</span>
+          </div>
+          <div class="mock-row is-active">
+            <span class="grip" aria-hidden="true">⠿</span>
+            <span class="thumb t1" aria-hidden="true"></span>
+            <span class="mock-text"><b>Formal</b><small>silver dress and black heels</small></span>
+            <span class="wearing">Wearing</span>
+          </div>
+          <div class="mock-row">
+            <span class="grip" aria-hidden="true">⠿</span>
+            <span class="thumb t2" aria-hidden="true"></span>
+            <span class="mock-text"><b>Everyday</b><small>jeans, a soft sweater and boots</small></span>
+          </div>
+          <div class="mock-row">
+            <span class="grip" aria-hidden="true">⠿</span>
+            <span class="thumb t3" aria-hidden="true"></span>
+            <span class="mock-text"><b>Gym</b><small>leggings, a hoodie and trainers</small></span>
+          </div>
+          <div class="mock-row">
+            <span class="grip" aria-hidden="true">⠿</span>
+            <span class="thumb t4" aria-hidden="true"></span>
+            <span class="mock-text"><b>Pajamas</b><small>oversized shirt and fluffy socks</small></span>
+          </div>
+          <div class="mock-foot">
+            <span class="mock-btn">+ New outfit</span>
+            <span class="mock-btn">Clear</span>
+          </div>
+        </div>
+        <p class="mock-note">UI preview. Image and description open in their own floating windows.</p>
+      </div>
+    </section>
+
+    <section class="section wrap" id="features">
+      <div class="section-head">
+        <p class="eyebrow">Features</p>
+        <h2>Small panel, complete wardrobe.</h2>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <span class="num">01</span>
+          <h3>Per-persona lists</h3>
+          <p>Switching persona switches the outfit list. The header shows whose wardrobe you are looking at.</p>
+        </article>
+        <article class="card">
+          <span class="num">02</span>
+          <h3>Click to wear</h3>
+          <p>Replaces <code>[outfit: ]</code> in the persona description and leaves the rest of the text untouched.</p>
+        </article>
+        <article class="card">
+          <span class="num">03</span>
+          <h3>Two floating windows</h3>
+          <p>The outfit image and description open in separate windows. Drag, resize and close them independently.</p>
+        </article>
+        <article class="card">
+          <span class="num">04</span>
+          <h3>Drag to reorder</h3>
+          <p>Grab the grip on the left of a row and drop it wherever you want. The order is saved per persona.</p>
+        </article>
+        <article class="card">
+          <span class="num">05</span>
+          <h3>Local images</h3>
+          <p>Images are downscaled and stored in SillyTavern's settings. No upload service and no telemetry.</p>
+        </article>
+        <article class="card">
+          <span class="num">06</span>
+          <h3>Theme-aware</h3>
+          <p>The floating panels follow SillyTavern's theme, and the shirt button can be dragged out of the way.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section wrap" id="install">
+      <div class="section-head">
+        <p class="eyebrow">Installation</p>
+        <h2>Three steps.</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <span class="num">01</span>
+          <h3>Copy the folder</h3>
+          <p>Put <code>Persona-Outfits</code> in <code>data/&lt;your-user&gt;/extensions/</code>. For the default user, that is <code>data/default-user/extensions/</code>.</p>
+        </div>
+        <div class="step">
+          <span class="num">02</span>
+          <h3>Reload SillyTavern</h3>
+          <p>Reload the page, or use <strong>Extensions → Reload</strong>.</p>
+        </div>
+        <div class="step">
+          <span class="num">03</span>
+          <h3>Open the panel</h3>
+          <p>Click the shirt button in the corner, or run <code>/outfits</code>.</p>
+        </div>
+      </div>
+      <p class="aside">
+        Installing from Git? Replace this placeholder with your repository URL before publishing:
+        <code>https://github.com/YOUR-USERNAME/Persona-Outfits</code>.
+      </p>
+    </section>
+
+    <section class="section wrap" id="usage">
+      <div class="section-head">
+        <p class="eyebrow">Usage</p>
+        <h2>Write once, wear in a click.</h2>
+      </div>
+      <div class="usage">
+        <ol class="usage-list">
+          <li><strong>Add a placeholder.</strong> Put <code>[outfit: ]</code> anywhere in the persona description.</li>
+          <li><strong>Create outfits.</strong> Give each one a name, a description and an optional image.</li>
+          <li><strong>Click to wear.</strong> The placeholder becomes <code>[outfit: your description]</code>; the rest of the persona is untouched.</li>
+          <li><strong>Arrange the list.</strong> Drag the grip on the left of a row. The order is saved per persona.</li>
+        </ol>
+        <pre class="snippet"><code>Persona description
+...
+[outfit: silver dress and black heels]
+...</code></pre>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <div class="notes">
+        <div>
+          <p class="eyebrow">Good to know</p>
+          <h2>Local, quiet, and easy to undo.</h2>
+        </div>
+        <ul class="note-list">
+          <li>Images are downscaled and stored inside SillyTavern's <code>settings.json</code>. There is no upload service and no telemetry.</li>
+          <li>Deleting an outfit removes its image and thumbnail. New outfits stay as drafts until you click <strong>Save</strong>.</li>
+          <li>The image and description windows are independent; each can be toggled in <strong>Extensions → Persona Outfits</strong>.</li>
+          <li>External image URLs are loaded by your browser, so that host will see the request.</li>
+          <li>Works alongside the older <code>ST-Outfits</code> extension.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <span>Persona Outfits — a SillyTavern extension.</span>
+      <a href="#top">Back to top ↑</a>
+    </div>
+  </footer>
+</body>
+</html>
