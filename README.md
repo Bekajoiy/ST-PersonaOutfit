@@ -48,9 +48,8 @@ Copy the project folder into `data/<your-user>/extensions/` (for the default use
 - Deleting an outfit removes its full image and thumbnail from settings, and clears the displayed image.
 - New outfits are unsaved drafts until **Save**; Cancel/Escape discards them and any picked image.
 - Accepted image sources are raster data URLs (PNG, JPEG, WebP, GIF, AVIF, BMP) or `http(s)` URLs. `javascript:`, SVG data URLs, `blob:` and local-file URLs are rejected. Uploads are capped at 20 MB.
-- Deleting a persona does not automatically delete that persona's outfit data; it stays in settings to avoid accidental loss.
+- Deleting a persona also removes that persona's outfit list and images from settings. Only that persona's key is removed; outfits for other personas are untouched.
 - External image URLs are loaded by the browser, so the remote host will see the request.
-- Works alongside the older `ST-Outfits` extension.
 
 ## License
 

@@ -1786,6 +1786,51 @@ function onPersonaContextChanged() {
     renderList();
 }
 
+function onPersonaDeleted(payload) {
+    const avatarId = typeof payload === 'string' ? payload : payload?.avatarId;
+    if (!isSafePersonaKey(avatarId)) {
+        return;
+    }
+
+    // PERSONA_DELETED is emitted after SillyTavern removes the persona. If the
+    // key still belongs to an existing persona, never touch its outfits.
+    if (power_user.personas?.[avatarId]) {
+        return;
+    }
+
+    if (!settings.outfitsByPersona || !Object.prototype.hasOwnProperty.call(settings.outfitsByPersona, avatarId)) {
+        return;
+    }
+
+    const list = settings.outfitsByPersona[avatarId];
+    if (!Array.isArray(list)) {
+        return;
+    }
+
+    const deletedIds = new Set(list.map(outfit => outfit.id));
+    const count = list.length;
+    const name = String(payload?.name || getPersonaName(avatarId) || 'the deleted persona').trim() || 'the deleted persona';
+
+    // Only this persona's key is removed.
+    delete settings.outfitsByPersona[avatarId];
+
+    if (displayedOutfitId && deletedIds.has(displayedOutfitId)) {
+        hideOutfitWindows();
+    }
+
+    if (getActivePersonaKey() === avatarId || (editingId && deletedIds.has(editingId))) {
+        editingId = null;
+        draftOutfit = null;
+        hideOutfitWindows();
+    }
+
+    saveSettings();
+
+    if (count > 0) {
+        toastr.info(`Deleted ${count} outfit${count === 1 ? '' : 's'} for ${name}.`, 'Persona Outfits', { escapeHtml: true });
+    }
+}
+
 function registerCommands() {
     if (typeof ctx.registerSlashCommand !== 'function') {
         return;
@@ -1825,6 +1870,9 @@ jQuery(async () => {
     }
     if (ctx.eventTypes?.PERSONA_RENAMED) {
         ctx.eventSource.on(ctx.eventTypes.PERSONA_RENAMED, () => updatePersonaHeader());
+    }
+    if (ctx.eventTypes?.PERSONA_DELETED) {
+        ctx.eventSource.on(ctx.eventTypes.PERSONA_DELETED, onPersonaDeleted);
     }
 
     console.log('[Persona Outfits] Loaded');
