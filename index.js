@@ -6,9 +6,10 @@
  */
 
 import { getContext, extension_settings } from '../../../extensions.js';
-import { saveSettingsDebounced } from '../../../../script.js';
+import { chat, getThumbnailUrl, saveSettingsDebounced } from '../../../../script.js';
 import { power_user } from '../../../power-user.js';
-import { user_avatar, setPersonaDescription } from '../../../personas.js';
+import { getUserAvatar, user_avatar, setPersonaDescription } from '../../../personas.js';
+import { encodeImage, normalizeCrop, openThumbnailCrop } from './thumbnail-crop.js';
 
 const MODULE_NAME = 'persona_outfits';
 const PLACEHOLDER = '[outfit: ]';
@@ -17,7 +18,27 @@ const IMAGE_MAX_EDGE = 1024;
 const THUMB_MAX_EDGE = 160;
 const MAX_IMAGE_SOURCE_LENGTH = 4_000_000;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const DISPLAY_MODES = [
+    { id: 'list', label: 'List', icon: 'fa-list' },
+    { id: 'compact', label: 'Compact', icon: 'fa-table-list' },
+    { id: 'gallery', label: 'Gallery', icon: 'fa-border-all' },
+];
+const GALLERY_COLUMN_OPTIONS = [2, 3, 4, 5, 6];
+const DEFAULT_GALLERY_COLUMNS = 3;
+const GALLERY_IMAGE_SIZES = {
+    small: { label: 'Small', short: 'S', pixels: 65 },
+    medium: { label: 'Medium', short: 'M', pixels: 85 },
+    large: { label: 'Large', short: 'L', pixels: 110 },
+    extraLarge: { label: 'Extra Large', short: 'XL', pixels: 140 },
+};
+const DEFAULT_GALLERY_IMAGE_SIZE = 'medium';
+const REORDER_THRESHOLD = 5;
+const REORDER_SCROLL_EDGE = 32;
 const RESERVED_PERSONA_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const CHAT_MESSAGE = '.mes';
+const CHAT_AVATAR = '.mesAvatarWrapper > .avatar > img';
+const CHAT_AVATAR_CLASS = 'po-dynamic-chat-avatar';
+const CHAT_AVATAR_IMAGE = '--po-chat-avatar-image';
 
 const ctx = getContext();
 
@@ -27,6 +48,10 @@ let draftOutfit = null;
 let lastPersonaKey = null;
 let displayedOutfitId = null;
 let resizeTimer = null;
+let cancelOutfitReorder = null;
+let cropSession = null;
+let renderedOutfitId = null;
+let chatAvatar = null;
 
 /* ------------------------------------------------------------------ */
 /* Settings                                                            */
@@ -36,6 +61,11 @@ function defaultSettings() {
     return {
         outfits: [], // Legacy global list; moved into outfitsByPersona on first use.
         outfitsByPersona: {},
+        outfitSelections: {},
+        displayMode: 'list',
+        galleryColumns: DEFAULT_GALLERY_COLUMNS,
+        galleryImageSize: DEFAULT_GALLERY_IMAGE_SIZE,
+        dynamicChatAvatar: false,
         appendIfMissing: true,
         showImagePanel: true,
         showTextPanel: true,
@@ -60,6 +90,18 @@ function loadSettings() {
     }
     settings.showImagePanel = !!settings.showImagePanel;
     settings.showTextPanel = !!settings.showTextPanel;
+    if (!DISPLAY_MODES.some(mode => mode.id === settings.displayMode)) {
+        settings.displayMode = 'list';
+    }
+    if (!GALLERY_COLUMN_OPTIONS.includes(settings.galleryColumns)) {
+        settings.galleryColumns = DEFAULT_GALLERY_COLUMNS;
+    }
+    if (typeof settings.galleryImageSize !== 'string' || !Object.hasOwn(GALLERY_IMAGE_SIZES, settings.galleryImageSize)) {
+        settings.galleryImageSize = DEFAULT_GALLERY_IMAGE_SIZE;
+    }
+    settings.dynamicChatAvatar = settings.dynamicChatAvatar === true;
+    // Retire the card setting. An old opt-in does not opt into chat avatars.
+    delete settings.syncPersonaAvatar;
     delete settings.autoShowImage;
     delete settings.activeOutfitId;
 
@@ -92,16 +134,31 @@ function loadSettings() {
     }
     settings.outfitsByPersona = clean;
 
+    // A selection disambiguates outfits that write the same placeholder.
+    const selections = Object.create(null);
+    for (const [key, selection] of Object.entries(settings.outfitSelections ?? {})) {
+        if (clean[key] && typeof selection?.marker === 'string'
+            && (selection.id === null || clean[key].some(outfit => outfit.id === selection.id))) {
+            selections[key] = { id: selection.id, marker: selection.marker };
+        }
+    }
+    settings.outfitSelections = selections;
+
     extension_settings[MODULE_NAME] = settings;
+    if (Object.hasOwn(stored, 'syncPersonaAvatar')) {
+        saveSettings();
+    }
 }
 
 function normalizeOutfit(outfit) {
+    const crop = normalizeCrop(outfit.crop);
     return {
         id: String(outfit.id || uid()),
         name: String(outfit.name ?? ''),
         description: String(outfit.description ?? ''),
         image: typeof outfit.image === 'string' ? outfit.image : '',
         thumb: typeof outfit.thumb === 'string' ? outfit.thumb : '',
+        ...(crop && { crop }),
     };
 }
 
@@ -220,6 +277,18 @@ function buildUi() {
                 <i class="fa-solid fa-grip-vertical po-grip"></i>
                 <span class="po-title">Outfits</span>
                 <span id="po-persona-name" class="po-persona-name" title="Persona"></span>
+                <div class="po-modes" role="group" aria-label="Outfit display mode">
+                    ${DISPLAY_MODES.map(({ id, label, icon }) => `
+                        <button type="button" class="po-icon-btn po-mode" data-mode="${id}"
+                            aria-label="${label} view" title="${label} view" aria-pressed="false">
+                            <i class="fa-solid ${icon}" aria-hidden="true"></i>
+                        </button>
+                    `).join('')}
+                </div>
+                <button type="button" id="po-gallery-settings-button" class="po-icon-btn po-hidden"
+                    popovertarget="po-gallery-settings" aria-label="Gallery settings" title="Gallery settings">
+                    <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+                </button>
                 <button id="po-close" class="po-icon-btn po-close" title="Close" aria-label="Close">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -232,6 +301,24 @@ function buildUi() {
                 <button id="po-clear" class="menu_button po-clear" title="Empty the [outfit: ] placeholder">
                     Clear
                 </button>
+            </div>
+        </div>
+
+        <div id="po-gallery-settings" popover="auto" aria-label="Gallery settings" class="po-popover">
+            <div class="po-gallery-label" id="po-columns-label">Columns</div>
+            <div class="po-gallery-options" role="group" aria-labelledby="po-columns-label">
+                ${GALLERY_COLUMN_OPTIONS.map(columns => `
+                    <button type="button" class="po-icon-btn" data-gallery-columns="${columns}"
+                        aria-label="${columns} columns" aria-pressed="false">${columns}</button>
+                `).join('')}
+            </div>
+            <div class="po-gallery-label" id="po-image-size-label">Image size</div>
+            <div class="po-gallery-options" role="group" aria-labelledby="po-image-size-label">
+                ${Object.entries(GALLERY_IMAGE_SIZES).map(([key, { label, short, pixels }]) => `
+                    <button type="button" class="po-icon-btn" data-gallery-size="${key}"
+                        aria-label="${label} (${pixels} pixels)" title="${label} · ${pixels} × ${pixels} px"
+                        aria-pressed="false">${short}</button>
+                `).join('')}
             </div>
         </div>
 
@@ -283,6 +370,13 @@ function buildUi() {
                         <input type="checkbox" id="po-setting-show-text">
                         <span>Open the outfit description window when wearing an outfit</span>
                     </label>
+                    <label class="checkbox_label">
+                        <input type="checkbox" id="po-setting-chat-avatar" aria-describedby="po-chat-avatar-help">
+                        <span>Dynamic Chat Avatar</span>
+                    </label>
+                    <div id="po-chat-avatar-help" class="po-help">
+                        Display the selected outfit image as the avatar for the active persona's chat messages.
+                    </div>
                     <div class="po-help">
                         Outfits are saved per persona: switching persona switches the list.
                         Put <code>[outfit: ]</code> anywhere in your persona description; wearing an outfit fills it in
@@ -314,6 +408,26 @@ function buildUi() {
             settings.showTextPanel = !!this.checked;
             saveSettings();
         });
+
+    $('#po-setting-chat-avatar')
+        .prop('checked', settings.dynamicChatAvatar)
+        .on('change', function () {
+            settings.dynamicChatAvatar = this.checked;
+            updateChatAvatar(getActiveOutfit());
+            saveSettings();
+        });
+
+    $('.po-mode').on('click', function () {
+        if (settings.displayMode !== this.dataset.mode) {
+            settings.displayMode = this.dataset.mode;
+            renderList();
+            saveSettings();
+        }
+    });
+
+    const list = document.getElementById('po-list');
+    cancelOutfitReorder = bindReorder(list);
+    bindGallerySettings();
 
     $('#po-reset-positions').on('click', () => {
         settings.panel = { left: null, top: null };
@@ -350,6 +464,13 @@ function buildUi() {
 
     makeToggleDraggable();
     $('#po-close').on('click', () => setPanelOpen(false));
+    $('#po-list').on('scroll', positionOpenOutfitMenu);
+    $('#po-panel .po-header').on('pointerdown', event => {
+        closeOutfitMenu();
+        if (!event.target.closest('#po-gallery-settings-button')) {
+            closeGallerySettings();
+        }
+    });
     $('#po-add').on('click', addOutfit);
     $('#po-clear').on('click', clearOutfit);
     $('#po-image-close').on('click', hideImagePanel);
@@ -407,13 +528,86 @@ function buildUi() {
     applyTextPanelSize();
 }
 
+function bindGallerySettings() {
+    const menu = document.getElementById('po-gallery-settings');
+    $(menu).on('toggle', positionGallerySettings);
+    $(menu).on('click', 'button', function () {
+        const columns = Number(this.dataset.galleryColumns ?? settings.galleryColumns);
+        const size = this.dataset.gallerySize ?? settings.galleryImageSize;
+        if (!GALLERY_COLUMN_OPTIONS.includes(columns) || !Object.hasOwn(GALLERY_IMAGE_SIZES, size)
+            || (columns === settings.galleryColumns && size === settings.galleryImageSize)) {
+            return;
+        }
+        cancelOutfitReorder();
+        closeOutfitMenu();
+        settings.galleryColumns = columns;
+        settings.galleryImageSize = size;
+        updateGalleryPreferences();
+        clampIntoView(document.getElementById('po-panel'));
+        positionGallerySettings();
+        saveSettings();
+    });
+    updateGalleryPreferences();
+}
+
+function updateGalleryPreferences() {
+    const panel = document.getElementById('po-panel');
+    panel.style.setProperty('--po-gallery-columns', settings.galleryColumns);
+    panel.style.setProperty('--po-gallery-size', `${GALLERY_IMAGE_SIZES[settings.galleryImageSize].pixels}px`);
+    $('#po-gallery-settings button').each((_, button) => {
+        const selected = button.dataset.galleryColumns
+            ? Number(button.dataset.galleryColumns) === settings.galleryColumns
+            : button.dataset.gallerySize === settings.galleryImageSize;
+        button.setAttribute('aria-pressed', String(selected));
+    });
+}
+
+function updateGalleryMode(mode) {
+    const gallery = mode === 'gallery';
+    document.getElementById('po-panel').dataset.mode = mode;
+    $('#po-gallery-settings-button').toggleClass('po-hidden', !gallery);
+    if (gallery) {
+        syncGalleryScrollbarWidth();
+    } else {
+        closeGallerySettings();
+    }
+}
+
+function syncGalleryScrollbarWidth() {
+    const panel = document.getElementById('po-panel');
+    if (panel.dataset.mode !== 'gallery' || panel.classList.contains('po-hidden')) {
+        return;
+    }
+    // A stable gutter gives the fixed grid the same space with or without vertical overflow.
+    const list = document.getElementById('po-list');
+    panel.style.setProperty('--po-gallery-scrollbar', `${list.offsetWidth - list.clientWidth}px`);
+}
+
+function closeGallerySettings() {
+    document.querySelector('#po-gallery-settings:popover-open')?.hidePopover();
+}
+
+function positionGallerySettings() {
+    const menu = document.querySelector('#po-gallery-settings:popover-open');
+    if (menu) {
+        placePopover(menu, document.getElementById('po-gallery-settings-button').getBoundingClientRect());
+    }
+}
+
 function setPanelOpen(open) {
+    if (!open) {
+        closeGallerySettings();
+        cropSession?.abort();
+        cancelOutfitReorder();
+    }
     settings.panelOpen = !!open;
     updatePanelVisibility();
     saveSettings();
 }
 
 function onWindowResize() {
+    cancelOutfitReorder();
+    closeOutfitMenu();
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
         positionToggle();
@@ -422,11 +616,12 @@ function onWindowResize() {
 
         if (settings.panelOpen) {
             const panel = document.getElementById('po-panel');
-            if (hasSavedPosition(settings.panel)) {
+            if (hasSavedPosition(settings.panel) || settings.displayMode === 'gallery') {
                 clampIntoView(panel);
             } else {
                 placeDefault(panel, 'panel');
             }
+            positionGallerySettings();
         }
 
         const imagePanel = document.getElementById('po-image-panel');
@@ -467,6 +662,7 @@ function updatePanelVisibility() {
             // element's containing block is zero-height. Compute top/left
             // ourselves instead of relying on `bottom`.
             panel.style.visibility = 'hidden';
+            syncGalleryScrollbarWidth();
             if (hasSavedPosition(settings.panel)) {
                 restorePosition(panel, settings.panel);
             } else {
@@ -906,7 +1102,7 @@ function renderList() {
         return;
     }
 
-    document.body.classList.remove('po-reordering');
+    cancelOutfitReorder();
 
     const avatar = getActivePersonaKey();
     if (avatar !== lastPersonaKey) {
@@ -918,10 +1114,20 @@ function renderList() {
     updatePersonaHeader(avatar);
 
     const outfits = getPersonaOutfits(avatar);
+    const active = getActiveOutfit(avatar);
+    const mode = settings.displayMode;
     const scrollTop = $list.scrollTop();
-    $list.empty();
-
+    const scrollLeft = $list.scrollLeft();
+    const $editing = $list.find('.po-editor').filter((_, editor) => editor.dataset.id === editingId).detach();
+    if (!$editing.length) {
+        cropSession?.abort();
+    }
+    $list.attr('data-mode', mode).empty();
+    updateGalleryMode(mode);
+    $('.po-mode').each((_, button) => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
     $('#po-add').prop('disabled', !avatar);
+    renderedOutfitId = active?.id ?? null;
+    updateChatAvatar(active);
 
     if (!avatar) {
         $list.append('<div class="po-empty">Select a persona to manage its outfits.</div>');
@@ -936,210 +1142,393 @@ function renderList() {
         return;
     }
 
-    const active = getActiveOutfit();
-
     for (const outfit of outfits) {
         const isActive = active?.id === outfit.id;
-
-        const $row = $('<div>', {
-            class: `po-row${isActive ? ' po-active' : ''}`,
-            'data-id': outfit.id,
-            tabindex: '0',
-            role: 'button',
-            title: `Wear ${outfit.name || 'this outfit'}`,
-        });
-
-        const $handle = $('<span class="po-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><i class="fa-solid fa-grip-vertical"></i></span>');
-        bindReorder($handle, outfit, $row, avatar, $list[0]);
-
-        const $thumb = $('<div class="po-thumb">');
-        if (isSafeImage(outfit.thumb || outfit.image)) {
-            $('<img alt="" draggable="false">').attr('src', outfit.thumb || outfit.image).appendTo($thumb);
-        } else {
-            $thumb.append('<i class="fa-solid fa-shirt"></i>');
-        }
-
-        const $info = $('<div class="po-info">');
-        const $name = $('<div class="po-name">').text(outfit.name || 'Untitled outfit');
-        if (isActive) {
-            $name.append('<span class="po-badge">Wearing</span>');
-        }
-        $('<div class="po-sub">')
-            .text(snippet(outfit.description) || 'No description')
-            .appendTo($info);
-        $name.prependTo($info);
-
-        const $actions = $('<div class="po-actions">');
-        const $edit = $('<button class="po-icon-btn po-edit" title="Edit"><i class="fa-solid fa-pen"></i></button>');
-        const $delete = $('<button class="po-icon-btn po-del" title="Delete"><i class="fa-solid fa-trash-can"></i></button>');
-        $edit.on('click', event => {
-            event.stopPropagation();
-            startEdit(outfit.id);
-        });
-        $delete.on('click', event => {
-            event.stopPropagation();
-            deleteOutfit(outfit.id);
-        });
-        $actions.append($edit, $delete);
-
-        $row.append($handle, $thumb, $info, $actions);
-
-        $row.on('click', () => applyOutfit(outfit.id));
-        $row.on('keydown', event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                applyOutfit(outfit.id);
-            }
-        });
-
-        $list.append($row);
+        $list.append(mode === 'list'
+            ? buildListRow(outfit, isActive)
+            : buildOutfitTile(outfit, isActive, mode));
 
         if (editingId === outfit.id) {
-            $list.append(buildEditor(outfit));
+            $list.append($editing.length ? $editing : buildEditor(outfit));
         }
     }
 
     // A new outfit is kept out of settings until Save; show its editor anyway.
     if (draftOutfit && draftOutfit.id === editingId) {
-        $list.append(buildEditor(draftOutfit));
+        $list.append($editing.length ? $editing : buildEditor(draftOutfit));
     }
 
-    $list.scrollTop(scrollTop);
+    $list.scrollTop(scrollTop).scrollLeft(scrollLeft);
 
     if (settings.panelOpen) {
         const panel = document.getElementById('po-panel');
-        if (hasSavedPosition(settings.panel)) {
+        if (hasSavedPosition(settings.panel) || mode === 'gallery') {
             clampIntoView(panel);
         } else {
             placeDefault(panel, 'panel');
         }
+        positionGallerySettings();
     }
 }
 
-function clearDropIndicators(list) {
-    list.querySelectorAll('.po-drop-before, .po-drop-after').forEach(row => {
-        row.classList.remove('po-drop-before', 'po-drop-after');
-    });
+function buildOutfitImage(sources) {
+    const $thumb = $('<span class="po-thumb" aria-hidden="true">');
+    const $placeholder = $('<i class="fa-solid fa-shirt">').appendTo($thumb);
+    const source = sources.find(isSafeImage);
+    if (source) {
+        $placeholder.addClass('po-hidden');
+        $('<img alt="" draggable="false">')
+            .on('error', function () {
+                $(this).remove();
+                $placeholder.removeClass('po-hidden');
+            })
+            .attr('src', source)
+            .appendTo($thumb);
+    }
+    return $thumb;
 }
 
-function bindReorder($handle, outfit, $row, avatar, list) {
-    const handle = $handle[0];
-    const row = $row[0];
-    let state = null;
-
-    const cleanup = () => {
-        state = null;
-        row.classList.remove('po-row-reordering');
-        document.body.classList.remove('po-reordering');
-        clearDropIndicators(list);
-    };
-
-    handle.addEventListener('click', event => {
+function buildOutfitActions(outfit, showLabels = false) {
+    const $actions = $('<div>', { class: showLabels ? 'po-menu-actions' : 'po-actions' });
+    const $edit = $('<button type="button" class="po-icon-btn po-edit" title="Edit" aria-label="Edit"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>');
+    const $delete = $('<button type="button" class="po-icon-btn po-del" title="Delete" aria-label="Delete"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>');
+    if (showLabels) {
+        $edit.append(' Edit');
+        $delete.append(' Delete');
+    }
+    $edit.on('click', event => {
         event.stopPropagation();
+        startEdit(outfit.id);
+    });
+    $delete.on('click', event => {
+        event.stopPropagation();
+        deleteOutfit(outfit.id);
+    });
+    return $actions.append($edit, $delete);
+}
+
+function equipFromEntry(id, entry) {
+    const restoreFocus = entry === document.activeElement;
+    if (applyOutfit(id) && restoreFocus) {
+        const replacement = [...document.querySelectorAll('#po-list [data-outfit-id]')]
+            .find(item => item.dataset.outfitId === id);
+        replacement?.focus({ preventScroll: true });
+    }
+}
+
+function buildListRow(outfit, isActive) {
+    const $row = $('<div>', {
+        class: `po-row${isActive ? ' po-active' : ''}`,
+        'data-outfit-entry': outfit.id,
+        'data-outfit-id': outfit.id,
+        tabindex: '0',
+        role: 'button',
+        'aria-pressed': String(isActive),
+        title: `Wear ${outfit.name || 'this outfit'}`,
     });
 
-    handle.addEventListener('pointerdown', event => {
-        if (event.button !== 0 || !row.isConnected) {
-            return;
-        }
+    const $handle = $('<span class="po-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><i class="fa-solid fa-grip-vertical"></i></span>');
 
+    const $info = $('<div class="po-info">');
+    const $name = $('<div class="po-name">').text(outfit.name || 'Untitled outfit');
+    if (isActive) {
+        $name.append('<span class="po-badge">Wearing</span>');
+    }
+    $info.append($name, $('<div class="po-sub">').text(snippet(outfit.description) || 'No description'));
+    $row.append($handle, buildOutfitImage([outfit.thumb, outfit.image]), $info, buildOutfitActions(outfit));
+
+    $row.on('click', event => {
+        if (!event.target.closest('.po-drag-handle')) {
+            equipFromEntry(outfit.id, $row[0]);
+        }
+    });
+    $row.on('keydown', event => {
+        if (event.target === $row[0] && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            equipFromEntry(outfit.id, $row[0]);
+        }
+    });
+    return $row;
+}
+
+function closeOutfitMenu() {
+    document.querySelector('.po-outfit-menu:popover-open')?.hidePopover();
+}
+
+function positionOpenOutfitMenu() {
+    const menu = document.querySelector('.po-outfit-menu:popover-open');
+    if (!menu) {
+        return;
+    }
+    const anchor = menu.parentElement.querySelector('.po-more').getBoundingClientRect();
+    const list = document.getElementById('po-list').getBoundingClientRect();
+    if (anchor.top >= list.bottom || anchor.bottom <= list.top || anchor.left >= list.right || anchor.right <= list.left) {
+        menu.hidePopover();
+        return;
+    }
+    placePopover(menu, anchor);
+}
+
+function placePopover(menu, anchor) {
+    const bounds = menu.getBoundingClientRect();
+    menu.style.left = `${clamp(anchor.right - bounds.width, 4, window.innerWidth - bounds.width - 4)}px`;
+    const top = anchor.bottom + bounds.height + 8 <= window.innerHeight || anchor.top < bounds.height + 8
+        ? anchor.bottom + 4 : anchor.top - bounds.height - 4;
+    menu.style.top = `${clamp(top, 4, Math.max(4, window.innerHeight - bounds.height - 4))}px`;
+}
+
+function buildOutfitTile(outfit, isActive, mode) {
+    const name = outfit.name || 'Untitled outfit';
+    const gallery = mode === 'gallery';
+    const $tile = $('<div class="po-tile">').attr('data-outfit-entry', outfit.id).toggleClass('po-active', isActive);
+    const $equip = $('<button type="button" class="po-equip">').attr({
+        'data-outfit-id': outfit.id,
+        'aria-label': `Wear ${name}`,
+        'aria-pressed': String(isActive),
+        title: name,
+    }).append(buildOutfitImage([outfit.thumb, outfit.image]));
+    if (!gallery) {
+        $equip.append($('<span class="po-tile-name">').text(name));
+    }
+    $equip.on('click', () => equipFromEntry(outfit.id, $equip[0]));
+
+    const menuId = `po-menu-${uid()}`;
+    const $more = $('<button type="button" class="po-icon-btn po-more"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>')
+        .attr({ 'aria-label': `Actions for ${name}`, title: `Actions for ${name}`, popovertarget: menuId });
+    const $menu = $('<div class="po-outfit-menu" popover="auto">')
+        .attr({ id: menuId, role: 'group', 'aria-label': `Actions for ${name}` })
+        .addClass('po-popover').append(buildOutfitActions(outfit, true));
+    const menu = $menu[0];
+
+    $menu.on('toggle', positionOpenOutfitMenu);
+    menu.querySelector('.po-edit').autofocus = true;
+    $menu.find('button').on('click', () => {
+        if (menu.matches(':popover-open')) {
+            menu.hidePopover();
+        }
+    });
+    $tile.on('contextmenu', event => {
         event.preventDefault();
-        event.stopPropagation();
-
-        state = {
-            pointerId: event.pointerId,
-            startY: event.clientY,
-            moved: false,
-            targetId: null,
-        };
-
-        try {
-            handle.setPointerCapture(event.pointerId);
-        } catch {
-            // Pointer capture is an optimisation; dragging still works without it.
-        }
-
-        row.classList.add('po-row-reordering');
-        document.body.classList.add('po-reordering');
-        clearDropIndicators(list);
+        $more[0].focus({ preventScroll: true });
+        menu.showPopover();
     });
+    const $grip = $('<span class="po-drag-handle po-touch-grip" title="Drag to reorder" aria-hidden="true"><i class="fa-solid fa-grip-vertical"></i></span>');
+    return $tile.append($equip, $grip, $more, $menu);
+}
 
-    handle.addEventListener('pointermove', event => {
-        if (!state || event.pointerId !== state.pointerId) {
-            return;
-        }
-        if (!state.moved && Math.abs(event.clientY - state.startY) < 4) {
-            return;
-        }
-
-        state.moved = true;
-
-        // Scroll the list when the pointer is near its top or bottom edge.
-        const listRect = list.getBoundingClientRect();
-        if (event.clientY < listRect.top + 24) {
-            list.scrollTop -= 10;
-        } else if (event.clientY > listRect.bottom - 24) {
-            list.scrollTop += 10;
-        }
-
-        const rows = [...list.querySelectorAll('.po-row')].filter(candidate => candidate !== row);
-        let target = null;
-        for (const candidate of rows) {
-            const rect = candidate.getBoundingClientRect();
-            if (event.clientY < rect.top + rect.height / 2) {
-                target = candidate;
-                break;
-            }
-        }
-
-        clearDropIndicators(list);
-        if (target) {
-            target.classList.add('po-drop-before');
-            state.targetId = target.getAttribute('data-id');
+function measureOutfitRows(list) {
+    const rows = [];
+    const { top, left } = list.getBoundingClientRect();
+    for (const entry of list.querySelectorAll(':scope > [data-outfit-entry]')) {
+        const rect = entry.getBoundingClientRect();
+        const y = rect.top - top + list.scrollTop;
+        const x = rect.left - left + list.scrollLeft + rect.width / 2;
+        const last = rows.at(-1);
+        if (last && Math.abs(last.top - y) < 1) {
+            last.entries.push({ entry, x });
+            last.bottom = Math.max(last.bottom, y + rect.height);
         } else {
-            if (rows.length) {
-                rows[rows.length - 1].classList.add('po-drop-after');
-            }
-            state.targetId = null;
+            rows.push({ top: y, bottom: y + rect.height, entries: [{ entry, x }] });
+        }
+    }
+    return rows;
+}
+
+function getOutfitDropTarget(state, bounds, list) {
+    const y = state.y - bounds.top + list.scrollTop;
+    const row = state.rows.find((row, index) => {
+        const next = state.rows[index + 1];
+        return !next || y < (row.bottom + next.top) / 2;
+    });
+    if (state.vertical || y < row.top || y > row.bottom) {
+        const after = y > (row.top + row.bottom) / 2;
+        return { entry: (after ? row.entries.at(-1) : row.entries[0]).entry, after };
+    }
+    const x = state.x - bounds.left + list.scrollLeft;
+    const next = row.entries.find(item => (x - item.x) * state.direction < 0);
+    return next ? { entry: next.entry, after: false } : { entry: row.entries.at(-1).entry, after: true };
+}
+
+function bindReorder(list) {
+    let drag = null;
+    let frame = 0;
+    let suppressedPointer = null;
+
+    function setIndicator(target) {
+        const previous = drag.target;
+        if (previous?.entry === target?.entry && previous?.after === target?.after) {
+            return;
+        }
+        previous?.entry.classList.remove('po-drop-before', 'po-drop-after');
+        drag.target = target;
+        target?.entry.classList.add(target.after ? 'po-drop-after' : 'po-drop-before');
+    }
+
+    function cancel() {
+        if (!drag) {
+            return;
+        }
+        cancelAnimationFrame(frame);
+        frame = 0;
+        setIndicator(null);
+        const { entry, handle, pointerId } = drag;
+        drag = null;
+        entry.classList.remove('po-entry-reordering');
+        list.classList.remove('po-reordering');
+        if (handle.hasPointerCapture(pointerId)) {
+            handle.releasePointerCapture(pointerId);
+        }
+    }
+
+    function edgeScroll(offset, length) {
+        const edge = Math.min(REORDER_SCROLL_EDGE, length / 3);
+        return 14 * (Math.max(0, edge - (length - offset)) - Math.max(0, edge - offset)) / edge;
+    }
+
+    function updateTarget() {
+        frame = 0;
+        const bounds = list.getBoundingClientRect();
+        if (drag.x < bounds.left || drag.x > bounds.right || drag.y < bounds.top || drag.y > bounds.bottom) {
+            setIndicator(null);
+            return;
+        }
+
+        const previousTop = list.scrollTop;
+        const previousLeft = list.scrollLeft;
+        list.scrollTop += edgeScroll(drag.y - bounds.top, list.clientHeight);
+        if (list.scrollWidth > list.clientWidth) {
+            list.scrollLeft += edgeScroll(drag.x - bounds.left - list.clientLeft, list.clientWidth);
+        }
+        setIndicator(getOutfitDropTarget(drag, bounds, list));
+        if (list.scrollTop !== previousTop || list.scrollLeft !== previousLeft) {
+            frame = requestAnimationFrame(updateTarget);
+        }
+    }
+
+    list.addEventListener('scroll', () => {
+        if (drag?.started) {
+            frame ||= requestAnimationFrame(updateTarget);
         }
     });
 
-    const endDrag = event => {
-        if (!state || event.pointerId !== state.pointerId) {
+    list.addEventListener('pointerdown', event => {
+        if (!event.isPrimary || event.button !== 0 || drag) {
+            return;
+        }
+        suppressedPointer = null;
+        const handle = event.target.closest('.po-drag-handle, .po-equip');
+        const entry = handle?.closest('[data-outfit-entry]');
+        if (!entry || entry.parentElement !== list) {
+            return;
+        }
+        drag = {
+            entry, handle, pointerId: event.pointerId, avatar: getActivePersonaKey(),
+            touchTap: event.pointerType === 'touch' && handle.matches('.po-equip'),
+            x: event.clientX, y: event.clientY, started: false, target: null,
+        };
+    });
+
+    window.addEventListener('pointermove', event => {
+        if (event.pointerId !== drag?.pointerId) {
+            return;
+        }
+        if (!drag.started) {
+            if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < REORDER_THRESHOLD) {
+                return;
+            }
+            if (drag.touchTap) {
+                // A swipe on the tile uses normal scrolling. The separate grip
+                // is the only touch surface that can initiate a drag.
+                suppressedPointer = event.pointerId;
+                cancel();
+                return;
+            }
+            const grid = getComputedStyle(list);
+            drag.vertical = list.dataset.mode === 'list' || grid.gridTemplateColumns.split(' ').length === 1;
+            drag.direction = grid.direction === 'rtl' ? -1 : 1;
+            drag.rows = measureOutfitRows(list);
+            // On touch a browser may initially capture the pointer to a child of the grip.
+            drag.handle.setPointerCapture(event.pointerId);
+            suppressedPointer = event.pointerId;
+            drag.started = true;
+            closeOutfitMenu();
+            drag.entry.classList.add('po-entry-reordering');
+            list.classList.add('po-reordering');
+        }
+        drag.x = event.clientX;
+        drag.y = event.clientY;
+        frame ||= requestAnimationFrame(updateTarget);
+    });
+
+    window.addEventListener('pointerup', event => {
+        if (event.pointerId !== drag?.pointerId) {
+            return;
+        }
+        const { entry, avatar, handle, started, touchTap } = drag;
+        if (touchTap) {
+            cancel();
+            if (handle.contains(document.elementFromPoint(event.clientX, event.clientY))) {
+                suppressedPointer = event.pointerId;
+                handle.click();
+            }
+            return;
+        }
+        let target = null;
+        if (started) {
+            const bounds = list.getBoundingClientRect();
+            if (event.clientX >= bounds.left && event.clientX <= bounds.right
+                && event.clientY >= bounds.top && event.clientY <= bounds.bottom) {
+                drag.x = event.clientX;
+                drag.y = event.clientY;
+                target = getOutfitDropTarget(drag, bounds, list);
+            }
+        }
+        cancel();
+        if (!target || target.entry === entry || !entry.isConnected || avatar !== getActivePersonaKey()) {
             return;
         }
 
-        const { moved, targetId } = state;
-        cleanup();
-
-        try {
-            handle.releasePointerCapture(event.pointerId);
-        } catch {
-            // Ignore.
-        }
-
-        if (!moved || !row.isConnected || getActivePersonaKey() !== avatar) {
-            return;
-        }
-
-        const rows = [...list.querySelectorAll('.po-row')].filter(candidate => candidate !== row);
-        const target = targetId ? rows.find(candidate => candidate.getAttribute('data-id') === targetId) : null;
-        const dropIndex = target ? rows.indexOf(target) : rows.length;
         const outfits = getPersonaOutfits(avatar);
-        const currentIndex = outfits.findIndex(item => item.id === outfit.id);
-
-        if (currentIndex < 0 || dropIndex === currentIndex) {
+        const from = outfits.findIndex(outfit => outfit.id === entry.dataset.outfitEntry);
+        const to = outfits.findIndex(outfit => outfit.id === target.entry.dataset.outfitEntry);
+        const gap = to + Number(target.after);
+        const index = gap > from ? gap - 1 : gap;
+        if (from < 0 || to < 0 || index === from) {
             return;
         }
-
-        const [movedOutfit] = outfits.splice(currentIndex, 1);
-        outfits.splice(dropIndex, 0, movedOutfit);
+        const active = getActiveOutfit(avatar);
+        const [outfit] = outfits.splice(from, 1);
+        outfits.splice(index, 0, outfit);
+        if (active && getActiveOutfit(avatar)?.id !== active.id) {
+            // A legacy marker can match multiple outfits. Reordering should
+            // keep wearing the same one even when its position changes.
+            settings.outfitSelections[avatar] = { id: active.id, marker: getOutfitMarker(avatar)[0] };
+        }
         saveSettings();
         renderList();
-    };
+    });
 
-    handle.addEventListener('pointerup', endDrag);
-    handle.addEventListener('pointercancel', cleanup);
+    window.addEventListener('pointercancel', event => {
+        if (event.pointerId === drag?.pointerId) {
+            cancel();
+        }
+    });
+    list.addEventListener('lostpointercapture', event => {
+        if (event.pointerId === drag?.pointerId && event.target === drag.handle) {
+            cancel();
+        }
+    });
+    window.addEventListener('blur', cancel);
+    list.addEventListener('click', event => {
+        if (suppressedPointer !== null && event.detail > 0
+            && (event.pointerId === undefined || event.pointerId === suppressedPointer)) {
+            suppressedPointer = null;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    }, true);
+
+    return cancel;
 }
 
 function addOutfit() {
@@ -1190,6 +1579,7 @@ function buildEditor(outfit) {
     const draft = {
         image: outfit.image || '',
         thumb: outfit.thumb || '',
+        crop: outfit.crop ?? null,
     };
 
     const $editor = $('<div class="po-editor">').attr('data-id', outfit.id);
@@ -1206,10 +1596,11 @@ function buildEditor(outfit) {
 
     const $imageRow = $('<div class="po-editor-image">');
 
-    const $drop = $('<div class="po-drop" title="Click or drop an image">');
-    const $preview = $('<img class="po-preview" alt="Outfit preview">');
+    const $drop = $('<button type="button" class="po-drop">');
+    const $preview = $('<img class="po-preview" alt="" draggable="false">');
+    const $cropBadge = $('<span class="po-crop-badge po-hidden" aria-hidden="true"><i class="fa-solid fa-crop-simple"></i></span>');
     const $empty = $('<div class="po-drop-empty"><i class="fa-solid fa-image"></i><span>Click or drop image</span></div>');
-    $drop.append($preview, $empty);
+    $drop.append($preview, $empty, $cropBadge);
 
     const $tools = $('<div class="po-image-tools">');
     const $file = $('<input type="file" class="po-file" accept="image/*" hidden>');
@@ -1228,18 +1619,27 @@ function buildEditor(outfit) {
     $editor.append($nameField, $descField, $imageRow, $actions);
 
     const renderPreview = () => {
-        if (isSafeImage(draft.image)) {
-            $preview.attr('src', draft.image).removeClass('po-hidden');
-            $empty.addClass('po-hidden');
+        const source = [draft.thumb, draft.image].find(isSafeImage);
+        const hasImage = isSafeImage(draft.image);
+        const label = hasImage ? 'Crop outfit thumbnail' : 'Choose or drop an image';
+        $drop.attr({ title: label, 'aria-label': label });
+        if (source) {
+            $preview.attr('src', source);
         } else {
-            $preview.attr('src', '').addClass('po-hidden');
-            $empty.removeClass('po-hidden');
+            $preview.removeAttr('src');
         }
+        $preview.toggleClass('po-hidden', !source);
+        $empty.toggleClass('po-hidden', !!source);
+        $cropBadge.toggleClass('po-hidden', !hasImage);
     };
 
     const applyImage = (image, thumb) => {
-        draft.image = image || '';
-        draft.thumb = thumb || image || '';
+        if (image !== draft.image) {
+            cropSession?.abort();
+            draft.image = image;
+            draft.thumb = thumb;
+            draft.crop = null;
+        }
         $url.val(/^https?:/i.test(draft.image) ? draft.image : '');
         renderPreview();
     };
@@ -1273,7 +1673,27 @@ function buildEditor(outfit) {
         }
     };
 
-    $drop.on('click', () => $file.trigger('click'));
+    $drop.on('click', () => {
+        if ($save.prop('disabled')) {
+            return;
+        }
+        if (!isSafeImage(draft.image)) {
+            $file.trigger('click');
+            return;
+        }
+        cancelOutfitReorder();
+        cropSession?.abort();
+        cropSession = new AbortController();
+        openThumbnailCrop(draft.image, draft.crop, cropSession.signal, (thumb, crop) => {
+            if (!isSafeImage(thumb)) {
+                return false;
+            }
+            draft.thumb = thumb;
+            draft.crop = crop;
+            renderPreview();
+            return true;
+        });
+    });
     $pick.on('click', () => $file.trigger('click'));
     $file.on('change', async function () {
         await readFile(this.files?.[0]);
@@ -1330,6 +1750,11 @@ function buildEditor(outfit) {
         outfit.description = String($desc.val() || '').trim();
         outfit.image = draft.image || '';
         outfit.thumb = draft.thumb || outfit.image || '';
+        if (draft.crop) {
+            outfit.crop = draft.crop;
+        } else {
+            delete outfit.crop;
+        }
 
         if (isDraft) {
             const outfits = ensurePersonaOutfits(getActivePersonaKey());
@@ -1347,7 +1772,7 @@ function buildEditor(outfit) {
 
         // Keep the persona in sync if this outfit is the one currently worn.
         if (wasActive) {
-            applyOutfit(outfit.id, { silent: true });
+            applyOutfit(outfit.id);
             toastr.success('Outfit updated and re-applied.', 'Persona Outfits');
         }
     });
@@ -1378,8 +1803,6 @@ async function deleteOutfit(id) {
         return;
     }
 
-    const wasActive = getActiveOutfit()?.id === id;
-    const wasDisplayed = displayedOutfitId === id;
     const plainName = outfit.name || 'Untitled outfit';
 
     const confirmed = await confirmDialog(
@@ -1391,21 +1814,33 @@ async function deleteOutfit(id) {
         return;
     }
 
-    const index = outfits.findIndex(item => item.id === id);
-    if (index >= 0) {
-        outfits.splice(index, 1);
+    const currentList = personaOutfitsList(avatar);
+    const index = currentList?.indexOf(outfit) ?? -1;
+    if (index < 0) {
+        return;
     }
-    if (outfits.length === 0) {
+
+    const wasActive = getActiveOutfit(avatar)?.id === id;
+    currentList.splice(index, 1);
+    if (!currentList.length) {
         delete settings.outfitsByPersona[avatar];
+        delete settings.outfitSelections[avatar];
+    } else if (wasActive) {
+        // Keep the existing description without mistaking another outfit with
+        // the same description for the one just deleted.
+        settings.outfitSelections[avatar] = { id: null, marker: getOutfitMarker(avatar)[0] };
     }
-    if (editingId === id) {
-        editingId = null;
-    }
-    if (wasActive || wasDisplayed) {
-        hideOutfitWindows();
+
+    if (avatar === getActivePersonaKey()) {
+        if (editingId === id) {
+            editingId = null;
+        }
+        if (wasActive || displayedOutfitId === id) {
+            hideOutfitWindows();
+        }
+        renderList();
     }
     saveSettings();
-    renderList();
 }
 
 async function confirmDialog(title, htmlMessage, plainMessage = htmlMessage) {
@@ -1423,26 +1858,26 @@ async function confirmDialog(title, htmlMessage, plainMessage = htmlMessage) {
 /* Wearing an outfit                                                   */
 /* ------------------------------------------------------------------ */
 
-function applyOutfit(id, { silent = false } = {}) {
+function applyOutfit(id) {
     const outfit = getPersonaOutfits().find(item => item.id === id);
     if (!outfit) {
-        return;
+        return false;
     }
 
     const description = (outfit.description || '').trim() || (outfit.name || '').trim();
     if (!description) {
         toastr.warning('Give this outfit a description first.', 'Persona Outfits');
-        return;
+        return false;
     }
 
     if (!user_avatar) {
         toastr.warning('Select a persona first.', 'Persona Outfits');
-        return;
+        return false;
     }
 
     if (!power_user.personas?.[user_avatar]) {
         toastr.warning('Your current persona is not set up yet. Create or select one in Persona Management.', 'Persona Outfits');
-        return;
+        return false;
     }
 
     const descriptor = getOrCreateDescriptor(user_avatar);
@@ -1461,12 +1896,13 @@ function applyOutfit(id, { silent = false } = {}) {
         text = trimmed ? `${trimmed}\n${replacement}` : replacement;
     } else {
         toastr.warning(`Add ${PLACEHOLDER} to your persona description first.`, 'Persona Outfits');
-        return;
+        return false;
     }
 
     descriptor.description = text;
     power_user.persona_description = text;
 
+    settings.outfitSelections[user_avatar] = { id, marker: getOutfitMarker(user_avatar)[0] };
     saveSettings();
 
     try {
@@ -1475,21 +1911,17 @@ function applyOutfit(id, { silent = false } = {}) {
         console.warn('[Persona Outfits] Could not refresh the persona description UI', error);
     }
 
-    try {
-        if (ctx.eventTypes?.PERSONA_UPDATED) {
-            ctx.eventSource.emit(ctx.eventTypes.PERSONA_UPDATED, user_avatar);
-        }
-    } catch (error) {
-        console.warn('[Persona Outfits] Could not emit persona update event', error);
-    }
-
     renderList();
+
+    if (ctx.eventTypes?.PERSONA_UPDATED) {
+        void ctx.eventSource.emit(ctx.eventTypes.PERSONA_UPDATED, user_avatar).catch(error => {
+            console.warn('[Persona Outfits] Could not emit persona update event', error);
+        });
+    }
 
     showOutfitWindows(outfit);
 
-    if (!silent) {
-        toastr.success(`Now wearing ${outfit.name || 'your outfit'}.`, 'Persona Outfits', { escapeHtml: true });
-    }
+    return true;
 }
 
 function clearOutfit() {
@@ -1515,6 +1947,7 @@ function clearOutfit() {
 
     descriptor.description = text;
     power_user.persona_description = text;
+    delete settings.outfitSelections[user_avatar];
     saveSettings();
 
     try {
@@ -1547,23 +1980,172 @@ function getOrCreateDescriptor(avatar) {
     return descriptor;
 }
 
-function currentOutfitText() {
-    const descriptor = power_user.persona_descriptions?.[user_avatar];
-    const text = String(power_user.persona_description ?? descriptor?.description ?? '');
-    const match = text.match(/\[outfit\s*:\s*([^\]]*)\]/i);
-    return match ? match[1].trim() : '';
+function getOutfitMarker(avatar) {
+    const description = power_user.persona_descriptions?.[avatar]?.description;
+    const text = avatar === getActivePersonaKey() ? power_user.persona_description ?? description : description;
+    return String(text ?? '').match(/\[outfit\s*:\s*([^\]]*)\]/i);
 }
 
-function getActiveOutfit() {
-    const text = currentOutfitText();
-    if (!text) {
+function getActiveOutfit(avatar = getActivePersonaKey()) {
+    const marker = getOutfitMarker(avatar);
+    if (!marker) {
         return null;
     }
 
-    return [...getPersonaOutfits()].reverse().find(outfit => {
-        const description = (outfit.description || '').trim() || (outfit.name || '').trim();
-        return description === text;
-    }) ?? null;
+    const outfits = getPersonaOutfits(avatar);
+    const selection = settings.outfitSelections[avatar];
+    if (selection?.marker === marker[0]) {
+        return outfits.find(outfit => outfit.id === selection.id) ?? null;
+    }
+
+    const text = marker[1].trim();
+    if (!text) {
+        return null;
+    }
+    // Older settings and manually edited descriptions still resolve by text.
+    return outfits.findLast(outfit => ((outfit.description || '').trim() || (outfit.name || '').trim()) === text) ?? null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dynamic chat avatar                                                 */
+/* ------------------------------------------------------------------ */
+
+function hasPersonaAvatar(source, { avatar, thumbnail, nativePath }) {
+    if (typeof source !== 'string' || !source) {
+        return false;
+    }
+
+    if (source === thumbnail) {
+        return true;
+    }
+
+    // Also accept cache-busted thumbnails and older native User Avatars/ paths.
+    try {
+        const url = new URL(source, window.location.href);
+        if (url.origin !== window.location.origin) {
+            return false;
+        }
+        if (url.pathname === '/thumbnail') {
+            return url.searchParams.get('type') === 'persona' && url.searchParams.get('file') === avatar;
+        }
+        return decodeURIComponent(url.pathname) === nativePath;
+    } catch {
+        return false;
+    }
+}
+
+function markChatAvatar(message, state) {
+    const img = message.querySelector(`:scope > ${CHAT_AVATAR}`);
+    if (!img) {
+        return;
+    }
+    // mesid is the message's current index in SillyTavern's live chat array.
+    const id = message.getAttribute('mesid');
+    const data = /^\d+$/.test(id) ? chat[Number(id)] : null;
+    const matches = message.matches('[is_user="true"][is_system="false"][force_avatar="true"]')
+        && data?.is_user === true && !data.is_system
+        && hasPersonaAvatar(data.force_avatar, state)
+        && hasPersonaAvatar(img.getAttribute('src'), state);
+    img.classList.toggle(CHAT_AVATAR_CLASS, matches);
+}
+
+function observeChatAvatars(state) {
+    const { container } = state;
+    const messages = new Set();
+
+    const addMessage = node => {
+        if (node instanceof Element && node.parentElement === container && node.matches(CHAT_MESSAGE)) {
+            messages.add(node);
+        }
+    };
+
+    const observer = new MutationObserver(records => {
+        for (const record of records) {
+            const target = record.target;
+            if (target === container) {
+                record.addedNodes.forEach(addMessage);
+            } else if (target.matches(CHAT_MESSAGE)) {
+                addMessage(target);
+            } else if (target.matches(CHAT_AVATAR) || target.matches('.mesAvatarWrapper, .mesAvatarWrapper > .avatar')) {
+                addMessage(target.closest(CHAT_MESSAGE));
+            }
+        }
+        for (const message of messages) {
+            markChatAvatar(message, state);
+        }
+        messages.clear();
+    });
+    observer.observe(container, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['src', 'mesid', 'is_user', 'is_system', 'force_avatar'],
+    });
+    return observer;
+}
+
+function clearChatAvatar() {
+    if (!chatAvatar) {
+        return;
+    }
+    const { observer, container } = chatAvatar;
+    chatAvatar = null;
+    observer?.disconnect();
+    container.style.removeProperty(CHAT_AVATAR_IMAGE);
+    container.querySelectorAll(`.${CHAT_AVATAR_CLASS}`).forEach(img => img.classList.remove(CHAT_AVATAR_CLASS));
+}
+
+function updateChatAvatar(outfit) {
+    const avatar = getActivePersonaKey();
+    const container = document.getElementById('chat');
+    if (!settings.dynamicChatAvatar || !container || !getPersonaName(avatar) || !isSafeImage(outfit?.image)) {
+        clearChatAvatar();
+        return;
+    }
+
+    const thumb = isSafeImage(outfit.thumb) ? outfit.thumb : outfit.image;
+    if (chatAvatar?.container === container && chatAvatar.avatar === avatar
+        && chatAvatar.image === outfit.image && chatAvatar.thumb === thumb) {
+        return;
+    }
+
+    clearChatAvatar();
+    const nativePath = new URL(getUserAvatar(''), window.location.href).pathname;
+    const state = {
+        container,
+        avatar,
+        image: outfit.image,
+        thumb,
+        thumbnail: getThumbnailUrl('persona', avatar),
+        nativePath: decodeURIComponent(nativePath) + avatar,
+        observer: null,
+    };
+    chatAvatar = state;
+
+    void (async () => {
+        // Prefer the existing small image. Leave the native src alone so a
+        // failed outfit image never invokes SillyTavern's missing-avatar handler.
+        for (const source of new Set([thumb, state.image])) {
+            let image;
+            try {
+                image = await loadImage(new URL(source, window.location.href).href);
+            } catch {
+                if (chatAvatar !== state) {
+                    return;
+                }
+                continue;
+            }
+            if (chatAvatar !== state || avatar !== getActivePersonaKey()) {
+                return;
+            }
+            container.style.setProperty(CHAT_AVATAR_IMAGE, `url(${JSON.stringify(image.src)})`);
+            for (const message of container.querySelectorAll(`:scope > ${CHAT_MESSAGE}`)) {
+                markChatAvatar(message, state);
+            }
+            state.observer = observeChatAvatars(state);
+            return;
+        }
+    })();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1730,22 +2312,7 @@ function drawScaledImage(image, maxEdge, quality) {
     const width = Math.max(1, Math.round(sourceWidth * scale));
     const height = Math.max(1, Math.round(sourceHeight * scale));
 
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height);
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = 'high';
-    context.drawImage(image, 0, 0, width, height);
-
-    const webp = canvas.toDataURL('image/webp', quality);
-    if (webp.startsWith('data:image/webp')) {
-        return webp;
-    }
-    return canvas.toDataURL('image/jpeg', quality);
+    return encodeImage(image, width, height, quality);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1775,6 +2342,7 @@ function onPersonaContextChanged() {
 
     // Keep an in-progress editor when a chat reloads with the same persona.
     if (avatar === lastPersonaKey && editingId) {
+        onPersonaUpdated(avatar);
         return;
     }
     if (avatar !== lastPersonaKey) {
@@ -1784,6 +2352,17 @@ function onPersonaContextChanged() {
 
     hideOutfitWindows();
     renderList();
+}
+
+function onPersonaUpdated(avatar) {
+    if (avatar === getActivePersonaKey()) {
+        const outfit = getActiveOutfit(avatar);
+        if ((outfit?.id ?? null) !== renderedOutfitId) {
+            renderList();
+        } else {
+            updateChatAvatar(outfit);
+        }
+    }
 }
 
 function onPersonaDeleted(payload) {
@@ -1798,32 +2377,17 @@ function onPersonaDeleted(payload) {
         return;
     }
 
-    if (!settings.outfitsByPersona || !Object.prototype.hasOwnProperty.call(settings.outfitsByPersona, avatarId)) {
-        return;
-    }
+    const count = personaOutfitsList(avatarId)?.length ?? 0;
+    const name = String(payload?.name || 'the deleted persona').trim() || 'the deleted persona';
 
-    const list = settings.outfitsByPersona[avatarId];
-    if (!Array.isArray(list)) {
-        return;
-    }
-
-    const deletedIds = new Set(list.map(outfit => outfit.id));
-    const count = list.length;
-    const name = String(payload?.name || getPersonaName(avatarId) || 'the deleted persona').trim() || 'the deleted persona';
-
-    // Only this persona's key is removed.
     delete settings.outfitsByPersona[avatarId];
-
-    if (displayedOutfitId && deletedIds.has(displayedOutfitId)) {
-        hideOutfitWindows();
-    }
-
-    if (getActivePersonaKey() === avatarId || (editingId && deletedIds.has(editingId))) {
+    delete settings.outfitSelections[avatarId];
+    if (getActivePersonaKey() === avatarId) {
         editingId = null;
         draftOutfit = null;
         hideOutfitWindows();
+        renderList();
     }
-
     saveSettings();
 
     if (count > 0) {
@@ -1870,6 +2434,9 @@ jQuery(async () => {
     }
     if (ctx.eventTypes?.PERSONA_RENAMED) {
         ctx.eventSource.on(ctx.eventTypes.PERSONA_RENAMED, () => updatePersonaHeader());
+    }
+    if (ctx.eventTypes?.PERSONA_UPDATED) {
+        ctx.eventSource.on(ctx.eventTypes.PERSONA_UPDATED, onPersonaUpdated);
     }
     if (ctx.eventTypes?.PERSONA_DELETED) {
         ctx.eventSource.on(ctx.eventTypes.PERSONA_DELETED, onPersonaDeleted);

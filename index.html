@@ -390,48 +390,23 @@
       margin-top: 30px;
     }
 
-    .card,
-    .step {
+    .card {
       padding: 22px;
       border: 1px solid var(--line);
       border-radius: var(--radius);
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
     }
 
-    .num {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 28px;
-      height: 28px;
-      margin-bottom: 16px;
-      border-radius: 50%;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-    }
-
-    .card h3,
-    .step h3 {
-      margin-bottom: 6px;
+    .card h3 {
+      margin: 0 0 6px;
       font-size: 1.02rem;
       letter-spacing: -0.01em;
     }
 
-    .card p,
-    .step p {
+    .card p {
       margin: 0;
       color: var(--muted);
       font-size: 0.92rem;
-    }
-
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
-      margin-top: 30px;
     }
 
     .usage {
@@ -472,37 +447,6 @@
       background: none;
       color: inherit;
       font-size: inherit;
-    }
-
-    .notes {
-      display: grid;
-      grid-template-columns: 0.9fr 1.1fr;
-      gap: 36px;
-      align-items: start;
-      padding: 32px;
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      background: linear-gradient(135deg, rgba(167, 139, 250, 0.08), rgba(244, 114, 182, 0.04));
-    }
-
-    .notes h2 {
-      margin-bottom: 0;
-      font-size: clamp(1.7rem, 2.6vw, 2.2rem);
-      letter-spacing: -0.03em;
-      line-height: 1.1;
-    }
-
-    .note-list {
-      display: grid;
-      gap: 12px;
-      margin: 0;
-      padding-left: 1.1em;
-      color: var(--muted);
-      font-size: 0.92rem;
-    }
-
-    .note-list li::marker {
-      color: var(--accent);
     }
 
     .site-footer {
@@ -554,24 +498,16 @@
         transform: none;
       }
 
-      .usage,
-      .notes {
+      .usage {
         grid-template-columns: 1fr;
       }
     }
 
     @media (max-width: 760px) {
-      .steps {
-        grid-template-columns: 1fr;
-      }
-
       .section {
         padding: 56px 0;
       }
 
-      .notes {
-        padding: 24px;
-      }
     }
 
     @media (max-width: 560px) {
@@ -613,6 +549,11 @@
         transition: none !important;
       }
     }
+    .install-details code { overflow-wrap: anywhere; }
+
+    .install-details p + p {
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -636,15 +577,14 @@
   <main id="main">
     <section class="hero wrap" id="top">
       <div class="hero-copy">
-        <p class="eyebrow">SillyTavern extension</p>
-        <h1>Give every persona their own wardrobe.</h1>
+        <p class="eyebrow">Version 1.10.0 · SillyTavern</p>
+        <h1>A wardrobe for every persona.</h1>
         <p class="lede">
-          A small floating outfit manager. Save an outfit with a description and an image, click it to wear it,
-          and keep each persona's list separate.
+          Save outfits, arrange them in a customizable Gallery, and equip them from SillyTavern’s floating panel.
         </p>
         <div class="actions">
           <a class="button primary" href="#install">Installation</a>
-          <a class="button" href="#features">See features</a>
+          <a class="button" href="https://github.com/Bekajoiy/ST-PersonaOutfit">View on GitHub</a>
         </div>
       </div>
 
@@ -683,105 +623,71 @@
             <span class="mock-btn">Clear</span>
           </div>
         </div>
-        <p class="mock-note">UI preview. Image and description open in their own floating windows.</p>
+        <p class="mock-note">List view preview</p>
       </div>
     </section>
 
     <section class="section wrap" id="features">
       <div class="section-head">
-        <p class="eyebrow">Features</p>
-        <h2>Small panel, complete wardrobe.</h2>
+        <h2>Wardrobe features</h2>
       </div>
       <div class="grid">
         <article class="card">
-          <span class="num">01</span>
-          <h3>Per-persona lists</h3>
-          <p>Switching persona switches the outfit list. The header shows whose wardrobe you are looking at.</p>
+          <h3>Three views</h3>
+          <p>Switch between List, Compact and Gallery. Drag to reorder in any view and keep a separate order for each persona.</p>
         </article>
         <article class="card">
-          <span class="num">02</span>
-          <h3>Click to wear</h3>
-          <p>Replaces <code>[outfit: ]</code> in the persona description and leaves the rest of the text untouched.</p>
+          <h3>Adjustable Gallery</h3>
+          <p>Choose 2–6 columns and square thumbnails from 65 to 140 px. The panel expands to fit and scrolls on narrow screens.</p>
         </article>
         <article class="card">
-          <span class="num">03</span>
-          <h3>Two floating windows</h3>
-          <p>The outfit image and description open in separate windows. Drag, resize and close them independently.</p>
+          <h3>Thumbnail framing</h3>
+          <p>Pan and zoom a square crop for the outfit picker. The floating image window keeps the full image.</p>
         </article>
         <article class="card">
-          <span class="num">04</span>
-          <h3>Drag to reorder</h3>
-          <p>Grab the grip on the left of a row and drop it wherever you want. The order is saved per persona.</p>
+          <h3>Dynamic Chat Avatar</h3>
+          <p>Optionally show the equipped outfit beside chat messages attributed to the active persona. The original avatar file stays intact.</p>
         </article>
         <article class="card">
-          <span class="num">05</span>
-          <h3>Local images</h3>
-          <p>Images are downscaled and stored in SillyTavern's settings. No upload service and no telemetry.</p>
+          <h3>Equip in one click</h3>
+          <p>Fill the <code>[outfit: ]</code> placeholder in the persona description. The active outfit is highlighted.</p>
         </article>
         <article class="card">
-          <span class="num">06</span>
-          <h3>Theme-aware</h3>
-          <p>The floating panels follow SillyTavern's theme, and the shirt button can be dragged out of the way.</p>
+          <h3>Floating previews</h3>
+          <p>Open the full image and outfit description in separate windows. Move, resize or disable each window independently.</p>
         </article>
       </div>
     </section>
 
     <section class="section wrap" id="install">
       <div class="section-head">
-        <p class="eyebrow">Installation</p>
-        <h2>Two ways to install.</h2>
+        <h2>Install Persona Outfits</h2>
       </div>
-      <div class="steps">
-        <div class="step">
-          <span class="num">01</span>
-          <h3>From Git (recommended)</h3>
-          <p>Open <strong>Extensions → Install Extension</strong> in SillyTavern, paste <code>https://github.com/Bekajoiy/ST-PersonaOutfit</code>, and confirm.</p>
-        </div>
-        <div class="step">
-          <span class="num">02</span>
-          <h3>Or copy the folder</h3>
-          <p>Put the project folder in <code>data/&lt;your-user&gt;/extensions/</code>. For the default user: <code>data/default-user/extensions/</code>.</p>
-        </div>
-        <div class="step">
-          <span class="num">03</span>
-          <h3>Reload and open</h3>
-          <p>Reload SillyTavern, then click the shirt button in the corner or run <code>/outfits</code>.</p>
+      <div class="usage">
+        <ol class="usage-list">
+          <li>Open <strong>Extensions → Install Extension</strong> in SillyTavern.</li>
+          <li>Paste the repository URL shown here, then confirm and reload.</li>
+          <li>Click the shirt button or run <code>/outfits</code> to open your wardrobe.</li>
+        </ol>
+        <div class="card install-details">
+          <h3>Repository URL</h3>
+          <p><code>https://github.com/Bekajoiy/ST-PersonaOutfit</code></p>
+          <p>Already installed? Update it in <strong>Extensions → Manage Extensions</strong>.</p>
         </div>
       </div>
     </section>
 
     <section class="section wrap" id="usage">
       <div class="section-head">
-        <p class="eyebrow">Usage</p>
-        <h2>Write once, wear in a click.</h2>
+        <h2>Equip your first outfit</h2>
       </div>
       <div class="usage">
         <ol class="usage-list">
-          <li><strong>Add a placeholder.</strong> Put <code>[outfit: ]</code> anywhere in the persona description.</li>
-          <li><strong>Create outfits.</strong> Give each one a name, a description and an optional image.</li>
-          <li><strong>Click to wear.</strong> The placeholder becomes <code>[outfit: your description]</code>; the rest of the persona is untouched.</li>
-          <li><strong>Arrange the list.</strong> Drag the grip on the left of a row. The order is saved per persona.</li>
+          <li>Put <code>[outfit: ]</code> anywhere in your persona description.</li>
+          <li>Choose <strong>New outfit</strong>, add a name, description and optional image, then save.</li>
+          <li>Click the outfit to equip it. The placeholder now contains its description.</li>
         </ol>
-        <pre class="snippet"><code>Persona description
-...
-[outfit: silver dress and black heels]
-...</code></pre>
-      </div>
-    </section>
-
-    <section class="section wrap">
-      <div class="notes">
-        <div>
-          <p class="eyebrow">Good to know</p>
-          <h2>Local, quiet, and easy to undo.</h2>
-        </div>
-        <ul class="note-list">
-          <li>Images are downscaled and stored inside SillyTavern's <code>settings.json</code>. There is no upload service and no telemetry.</li>
-          <li>Deleting an outfit removes its image and thumbnail. New outfits stay as drafts until you click <strong>Save</strong>.</li>
-          <li>Deleting a persona also removes its outfit list and images; other personas are untouched.</li>
-          <li>The image and description windows are independent; each can be toggled in <strong>Extensions → Persona Outfits</strong>.</li>
-          <li>External image URLs are loaded by your browser, so that host will see the request.</li>
-        </ul>
+        <pre class="snippet"><code>[outfit: silver dress and black heels]</code></pre>
       </div>
     </section>
   </main>

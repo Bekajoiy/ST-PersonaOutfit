@@ -1,56 +1,35 @@
 # Persona Outfits
 
-A SillyTavern extension that gives every persona its own outfit list.
+A wardrobe for each SillyTavern persona. Save outfits with a description and an optional image, then equip them from a floating panel.
 
-Save outfits with a name, description and optional image. Click an outfit to write it into the active persona's description, then browse its image and description in their own floating windows.
+**Version 1.10.0** · Tested with SillyTavern 1.19.0 · [Project site](https://bekajoiy.github.io/ST-PersonaOutfit/)
 
-- **Repository:** <https://github.com/Bekajoiy/ST-PersonaOutfit>
-- **Landing page:** <https://bekajoiy.github.io/ST-PersonaOutfit/>
+## Install or update
 
-## Features
+- **Install** via **Extensions → Install Extension**. Paste `https://github.com/Bekajoiy/ST-PersonaOutfit`, confirm, and reload SillyTavern.
+- **Update** an existing installation via **Extensions → Manage Extensions**, then reload. Saved outfits and preferences carry over.
+- **Manual install**. Copy the repository folder into `data/<your-user>/extensions/` and reload.
 
-- **Per-persona lists.** Switching persona switches the outfit list; the panel header shows whose wardrobe it is.
-- **One-click wear.** Replaces `[outfit: ]` in the persona description, leaving the rest of the text untouched.
-- **Optional image and description windows.** Separate floating windows, draggable and resizable, each with its own on/off toggle.
-- **Drag to reorder.** Grab the left grip on a row; the order is saved per persona.
-- **Local images.** Downscaled and stored in SillyTavern's settings. No upload service and no telemetry.
-- **Theme-aware UI.** Matching floating panels and a shirt button you can drag out of the way.
+## Use your wardrobe
 
-## Installation
+1. Add `[outfit: ]` to the active persona’s description.
+2. Click the shirt button or run `/outfits`.
+3. Choose **New outfit**, enter a name and description, optionally add an image, and save.
+4. Click an outfit to equip it. The description updates in place and the outfit is highlighted.
 
-### From Git (recommended)
+## Customize the panel
 
-1. Open **Extensions → Install Extension** in SillyTavern.
-2. Paste:
+- **List, Compact, and Gallery** share one saved order per persona. Drag the List grip, a Compact entry, or a Gallery image. On touch screens, use the tile’s grip. Use the ellipsis or right-click to edit or delete a Compact or Gallery entry.
+- **Gallery Settings** opens from the sliders icon. Choose **2–6 columns** and **65, 85, 110, or 140 px** square thumbnails. The panel resizes to fit, with horizontal scrolling on narrow screens.
+- **Crop a thumbnail** by clicking the image preview in the outfit editor. Drag or use the arrow keys to frame it, then zoom with the slider or mouse wheel. **Apply** updates the draft. **Save** commits the crop and preserves the full image. Remote images can be cropped when the host permits canvas access.
+- **Floating image and description windows** can be toggled, dragged, and resized independently. Find their settings under **Extensions → Persona Outfits**.
 
-   ```
-   https://github.com/Bekajoiy/ST-PersonaOutfit
-   ```
+## Dynamic Chat Avatar
 
-3. Confirm, then reload SillyTavern.
+Enable **Dynamic Chat Avatar** under **Extensions → Persona Outfits** to show the equipped thumbnail beside messages attributed to the active persona. The setting is off by default. Older messages without saved persona attribution keep their native avatar. Original persona files and chat history remain intact.
 
-### Manually
-
-Copy the project folder into `data/<your-user>/extensions/` (for the default user: `data/default-user/extensions/`), then reload SillyTavern.
-
-## Usage
-
-1. Put `[outfit: ]` anywhere in the active persona's description.
-2. Click the shirt button in the corner, or run `/outfits`.
-3. Click **New outfit**, add a name, description and optional image, then **Save**.
-4. Click a row to wear the outfit. The placeholder becomes `[outfit: your description]`.
-5. Drag the grip on the left of a row to reorder outfits. The order is saved per persona.
-6. Use **Extensions → Persona Outfits** to toggle the image and description windows, or reset their positions and sizes.
-
-## Notes
-
-- Tested with SillyTavern 1.19.0.
-- Deleting an outfit removes its full image and thumbnail from settings, and clears the displayed image.
-- New outfits are unsaved drafts until **Save**; Cancel/Escape discards them and any picked image.
-- Accepted image sources are raster data URLs (PNG, JPEG, WebP, GIF, AVIF, BMP) or `http(s)` URLs. `javascript:`, SVG data URLs, `blob:` and local-file URLs are rejected. Uploads are capped at 20 MB.
-- Deleting a persona also removes that persona's outfit list and images from settings. Only that persona's key is removed; outfits for other personas are untouched.
-- External image URLs are loaded by the browser, so the remote host will see the request.
+Outfits and uploaded images are stored in SillyTavern’s settings. External image URLs are loaded in the browser. Deleting an outfit removes its stored images, and deleting a persona removes its outfit collection.
 
 ## License
 
-Released under [CC0 1.0 Universal](LICENSE).
+[CC0 1.0 Universal](LICENSE)
